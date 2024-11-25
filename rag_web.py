@@ -53,47 +53,18 @@ def load_pdfs_from_directory(folder_path):
 # Streamlit 앱 시작
 def main():
     st.title("PDF 기반 RAG Chatbot")
+    # PDF 파일이 저장된 폴더 경로    
+    db_path = r".\vectordb\my_db"  # 벡터 DB를 저장할 경로를 지정하세요
+    ### Chroma DB 로드
+    #embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    embeddings = HuggingFaceEmbeddings(
+    model_name="jhgan/ko-sbert-nli",
+    model_kwargs={'device': 'cpu'},  # CPU 사용
+    encode_kwargs={'normalize_embeddings': True})
+    #vectordb = Chroma(persist_directory=db_path, embedding_function=embeddings)
 
-    # PDF 파일이 저장된 폴더 경로
-    pdf_folder_path = r"D:\Repo\finalmobile5\finalUtilities\AppReversing\document\포렌식 관련 논문모음"  # PDF 파일이 있는 폴더 경로를 지정하세요
-    db_path = r"T:\Repo\python\web2\vectordb\my_db"  # 벡터 DB를 저장할 경로를 지정하세요
-    #db_path = r"T:\Repo\python\web2\vec2"
-
-    # 첫 번째 실행 시 벡터 데이터베이스 생성
-    if not os.path.exists(db_path):
-        st.write("PDF 파일을 벡터화하여 데이터베이스를 생성하는 중입니다...")
-
-        # 임베딩 모델 설정
-        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2") 
-
-        ### 1.크로마 방식
-        #documents = load_pdfs_from_directory(pdf_folder_path)        
-        # 텍스트 분할
-        #text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-        #texts = text_splitter.split_documents(documents)
-
-        #vectordb = Chroma.from_documents(texts, embeddings, persist_directory=db_path)
-
-        #vectordb.persist()
-
-        ### 1.파이스 방식
-        # documents = load_pdfs_from_directory(pdf_folder_path)
-        # split_docs = split_documents(documents)
-        # faiss_db = create_faiss_db(split_docs)
-        
-        st.write("벡터 DB 생성 완료")
-    else:
-        ### Chroma DB 로드
-        #embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-        embeddings = HuggingFaceEmbeddings(
-        model_name="jhgan/ko-sbert-nli",
-        model_kwargs={'device': 'cpu'},  # CPU 사용
-        encode_kwargs={'normalize_embeddings': True}
-    )
-        #vectordb = Chroma(persist_directory=db_path, embedding_function=embeddings)
-
-        ## FAISS DB 로드
-        vectordb = FAISS.load_local(db_path, embeddings, allow_dangerous_deserialization=True)
+    ## FAISS DB 로드
+    vectordb = FAISS.load_local(db_path, embeddings, allow_dangerous_deserialization=True)
 
     # Llama 모델 로드
     llm = OllamaLLM(model="llama3.2")
@@ -106,7 +77,7 @@ def main():
         llm,
         vectordb.as_retriever(),
         memory=memory
-    )
+        )
 
     # 질문 입력
     user_input = st.text_input("질문을 입력하세요:")
