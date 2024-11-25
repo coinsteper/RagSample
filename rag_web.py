@@ -56,7 +56,7 @@ def main():
 
     # PDF 파일이 저장된 폴더 경로
     pdf_folder_path = r"D:\Repo\finalmobile5\finalUtilities\AppReversing\document\포렌식 관련 논문모음"  # PDF 파일이 있는 폴더 경로를 지정하세요
-    db_path = r"T:\Repo\python\web2\vectordb\my_gen_db"  # 벡터 DB를 저장할 경로를 지정하세요
+    db_path = r"T:\Repo\python\web2\vectordb\my_db"  # 벡터 DB를 저장할 경로를 지정하세요
     #db_path = r"T:\Repo\python\web2\vec2"
 
     # 첫 번째 실행 시 벡터 데이터베이스 생성

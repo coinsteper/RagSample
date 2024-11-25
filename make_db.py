@@ -56,7 +56,7 @@ if __name__ == "__main__":
     
     # 문서가 있는 디렉토리 경로와 저장할 DB 이름 지정
     directory_path = r"D:\Repo\finalmobile5\finalUtilities\AppReversing\document\포렌식 관련 논문모음"
-    db_name = "my_gen_db"
+    db_name = "my_gen_db_new"
     
     vectordb = create_vector_db(directory_path, db_name)
     print("Vector DB created successfully!")
