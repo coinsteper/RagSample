@@ -1,103 +1,65 @@
 import os
-import streamlit as st
-from langchain.document_loaders import DirectoryLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.vectorstores import Chroma
-from langchain.chains import ConversationalRetrievalChain
-from langchain.memory import ConversationBufferMemory
-from langchain_ollama.llms import OllamaLLM
-from langchain.docstore.document import Document
-from PyPDF2 import PdfReader
 from langchain.vectorstores import FAISS
+from sentence_transformers import SentenceTransformer
+from langchain.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import Document
+import markdown
 
-# 텍스트 분할
-def split_documents(documents):
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    return text_splitter.split_documents(documents)
+def get_all_files(folder_path, extensions):
+    files = []
+    for root, _, filenames in os.walk(folder_path):
+        for filename in filenames:
+            if filename.endswith(tuple(extensions)):
+                files.append(os.path.join(root, filename))
+    return files
 
+def read_markdown(file_path):
+    with open(file_path, "r", encoding="utf-8") as file:
+        md_content = file.read()
+    html = markdown.markdown(md_content)
+    return html
 
-def create_faiss_db(documents, db_path="faiss_db"):
-    #embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    embeddings = HuggingFaceEmbeddings(
-        model_name="jhgan/ko-sbert-nli",
-        model_kwargs={'device': 'cpu'},  # CPU 사용
-        encode_kwargs={'normalize_embeddings': True}
-    )
-    vectordb = FAISS.from_documents(documents, embeddings)
-    vectordb.save_local(db_path)  # DB 파일 저장
-    print(f"FAISS DB가 {db_path}에 저장되었습니다.")
-    return vectordb
+def read_pdf(file_path):
+    loader = PyPDFLoader(file_path)
+    return loader.load()
 
-
-# PDF 파일 로드 함수
-def load_pdfs_from_directory(folder_path):
+def convert_to_documents(pdf_files, md_files):
     documents = []
-    
-    # 폴더 내 모든 PDF 파일을 읽어 Document 형식으로 변환
-    for filename in os.listdir(folder_path):
-        if filename.endswith(".pdf"):
-            file_path = os.path.join(folder_path, filename)
-            reader = PdfReader(file_path)
-            text = ""
-            
-            for page_num in range(len(reader.pages)):
-                page = reader.pages[page_num]
-                text += page.extract_text()
-            
-            # LangChain Document 형식으로 추가
-            documents.append(Document(page_content=text, metadata={"source": file_path}))
-    
+
+    for pdf_file in pdf_files:
+        pdf_documents = read_pdf(pdf_file)
+        for doc in pdf_documents:
+            doc.metadata["source"] = pdf_file
+        documents.extend(pdf_documents)
+
+    for md_file in md_files:
+        text = read_markdown(md_file)
+        documents.append(Document(page_content=text, metadata={"source": md_file}))
+
     return documents
 
-# Streamlit 앱 시작
-def main():
-    st.title("PDF 기반 RAG Chatbot")
-    # PDF 파일이 저장된 폴더 경로    
-    db_path = r".\vectordb\my_db"  # 벡터 DB를 저장할 경로를 지정하세요
-    ### Chroma DB 로드
-    #embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    embeddings = HuggingFaceEmbeddings(
-    model_name="jhgan/ko-sbert-nli",
-    model_kwargs={'device': 'cpu'},  # CPU 사용
-    encode_kwargs={'normalize_embeddings': True})
-    #vectordb = Chroma(persist_directory=db_path, embedding_function=embeddings)
+def build_faiss_index(documents):
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
+    splitted_docs = text_splitter.split_documents(documents)
 
-    ## FAISS DB 로드
-    vectordb = FAISS.load_local(db_path, embeddings, allow_dangerous_deserialization=True)
+    embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+    
+    texts = [doc.page_content for doc in splitted_docs]
+    metadatas = [doc.metadata for doc in splitted_docs]
+    embeddings = embedding_model.encode(texts, show_progress_bar=True)
 
-    # Llama 모델 로드
-    llm = OllamaLLM(model="llama3.2")
+    faiss_index = FAISS.from_texts(texts=texts, embeddings=embeddings, metadatas=metadatas)
+    return faiss_index
 
-    # 메모리 설정
-    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+pdf_folder = r"D:\Repo\finalmobile5\finalUtilities\AppReversing\document\포렌식 관련 논문모음"
+md_folder = r"T:\Repo\FinalProductNet.wiki"
 
-    # RAG 체인 생성
-    qa_chain = ConversationalRetrievalChain.from_llm(
-        llm,
-        vectordb.as_retriever(),
-        memory=memory
-        )
+pdf_files = get_all_files(pdf_folder, [".pdf"])
+md_files = get_all_files(md_folder, [".md"])
 
-    # 질문 입력
-    user_input = st.text_input("질문을 입력하세요:")
+documents = convert_to_documents(pdf_files, md_files)
+faiss_index = build_faiss_index(documents)
 
-    if user_input:
-        # 질문에 대한 답변 생성
-        result = qa_chain({"question": user_input})
-        answer = result['answer']
-
-        # 답변 출력
-        st.write(f"**답변:** {answer}")
-        
-        # 출처 정보 출력 (출처가 있을 경우에만)
-        sources = result.get('source_documents', [])
-        if sources:
-            st.write("**출처:**")
-            for i, doc in enumerate(sources, 1):
-                source_path = doc.metadata.get("source", "Unknown source")
-                st.write(f"- {source_path}")
-
-# Streamlit 애플리케이션 실행
-if __name__ == "__main__":
-    main()
+faiss_index.save_local("faiss_vector_db")
+print("FAISS 벡터 데이터베이스 생성 완료!")
